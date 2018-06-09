@@ -82,6 +82,7 @@ class ValueIterationAgent(object):
     # init values
     self.values = {}
 
+    # initalize values
     for s in states:
       if mdp.is_terminal(s):
         self.values[s] = mdp.get_reward(s)
@@ -99,7 +100,7 @@ class ValueIterationAgent(object):
         actions = mdp.get_actions(s)
         v_s = []
         for a in actions:
-          P_s1sa = mdp.get_transition_states_and_probs(s, a)
+          P_s1sa = mdp.get_transition_states_and_probs(s, a) # a list of (state, prob) pair
           R_sas1 = [mdp.get_reward(s1) for s1 in [p[0] for p in P_s1sa]]
           v_s.append(sum([P_s1sa[s1_id][1] * (mdp.get_reward(s) + gamma *
                                               values_tmp[P_s1sa[s1_id][0]]) for s1_id in range(len(P_s1sa))]))

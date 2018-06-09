@@ -32,30 +32,34 @@ def main():
   N_STATES = H * W
   N_ACTIONS = 5
 
-  # init the gridworld
+  # init the gridworld including the reward
   grid = [['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
           ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
           ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
           ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
-          ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
+          ['-1', '-1', '-1', '-1', '-1', '0', '0', '-1', '-1', '-1'],
+          ## ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
+          ['0', '0', '0', '0', '0', '0', '0', '-1', '0', '0'],
+          ['0', '0', '0', '0', '0', '0', '-1', '0', '0', '0'],
+          ['0', '0', '0', '0', '0', '-1', '0', '0', '0', '0'],
           ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0'],
           ['0', '0', '0', '0', '0', '0', '0', '0', '0', str(R_MAX)]]
 
+  # custom
+  for i, row in enumerate(grid):
+      for j, e in enumerate(row):
+          if e is '0':
+              grid[i][j] = '-1'
+          elif e is '-1':
+              grid[i][j] = '-10'
+
+  # grid, terminal state, trans_prob
   gw = gridworld.GridWorld(grid, {(H - 1, W - 1)}, 1 - ACT_RAND)
 
   # solve the MDP using value iteration
   vi = value_iteration.ValueIterationAgent(gw, GAMMA, 100)
-
-  r_mat = gw.get_reward_mat()
-  print 'show rewards map. any key to continue'
-  img_utils.heatmap2d(r_mat, 'Reward Map - Ground Truth')
-
-  v_mat = gw.get_values_mat(vi.get_values())
-  print 'show values map. any key to continue'
-  img_utils.heatmap2d(v_mat, 'Value Map - Ground Truth')
+  r_mat_gt = gw.get_reward_mat()
+  v_mat_gt = gw.get_values_mat(vi.get_values())
 
   # Construct transition matrix
   P_a = np.zeros((N_STATES, N_STATES, N_ACTIONS))
@@ -73,19 +77,54 @@ def main():
   gw.display_policy_grid(vi.get_optimal_policy())
   gw.display_value_grid(vi.values)
 
+  # display a path following optimal policy
+  ## print 'show optimal path. any key to continue'
+  path_gt = gw.display_path_grid(vi.get_optimal_policy())
+  ## img_utils.heatmap2d(np.reshape(path, (H, W), order='F'), 'Path')
+  ## sys.exit()
+
+
   # setup policy
   policy = np.zeros(N_STATES)
   for i in range(N_STATES):
     policy[i] = vi.get_action(gw.idx2pos(i))
 
+  #------------------ After getting optimal policy through iterations ------------------
   # solve for the rewards
   rewards = lp_irl(P_a, policy, gamma=GAMMA, l1=L1, R_max=R_MAX)
+  r_mat = np.reshape(rewards, (H, W), order='F')
+  v_mat = gw.get_values_mat(vi.get_values())
+  path  = gw.display_path_grid(vi.get_optimal_policy())
 
   # display recoverred rewards
   print 'show recoverred rewards map. any key to continue'
-  img_utils.heatmap2d(np.reshape(rewards, (H, W), order='F'), 'Reward Map - Recovered')
-  img_utils.heatmap3d(np.reshape(rewards, (H, W), order='F'), 'Reward Map - Recovered')
+  ## img_utils.heatmap2d(np.reshape(rewards, (H, W), order='F'), 'Reward Map - Recovered')
+  #img_utils.heatmap3d(np.reshape(rewards, (H, W), order='F'), 'Reward Map - Recovered')
 
+  # display a path following optimal policy
+  print 'show optimal path. any key to continue'
+  ## path = gw.display_path_grid(vi.get_optimal_policy())
+  ## img_utils.heatmap2d(np.reshape(path, (H, W), order='F'), 'Path')
+
+
+  # plots
+  plt.figure(figsize=(20,4))
+  plt.subplot(2, 4, 1)
+  img_utils.heatmap2d(r_mat_gt, 'Rewards Map - Ground Truth', block=False)
+  plt.subplot(2, 4, 2)
+  img_utils.heatmap2d(np.reshape(v_mat_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+  plt.subplot(2, 4, 3)
+  img_utils.heatmap2d(np.reshape(r_mat, (H,W), order='F'), 'Reward Map - Recovered', block=False)
+  plt.subplot(2, 4, 4)
+  img_utils.heatmap2d(np.reshape(v_mat, (H,W), order='F'), 'Value Map - Recovered', block=False)
+
+  plt.subplot(2, 4, 5)
+  img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
+  plt.subplot(2, 4, 7)
+  img_utils.heatmap2d(np.reshape(path, (H,W), order='F'), 'Path Map - Recovered', block=False)
+  
+  plt.show()
+  
 
 if __name__ == "__main__":
   main()
