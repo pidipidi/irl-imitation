@@ -303,7 +303,7 @@ class GridWorld(object):
     input:
       policy    a dictionary of the optimal policy {<state, action_dist>}
     """
-    print "==Display optimal path on grid=="
+    print "==Display an optimal path on grid=="
 
     max_step = 100
 
@@ -312,6 +312,7 @@ class GridWorld(object):
         dict_policy = True
 
     s         = s0 if s0 is not None else [0,0]
+    self.reset(s)
     path_grid = np.zeros(np.shape(self.grid))
     path_grid[s[0],s[1]] = 1.0      
         
@@ -319,31 +320,13 @@ class GridWorld(object):
     while cnt < max_step:
 
       if dict_policy:
-          a = int(policy[tuple(s)][0][0])
+          s, a, s_nxt, r, is_done = self.step(int(policy[tuple(s)][0][0]))
       else:
-          a = int(policy[self.pos2idx(s)])
-
-      if self.dirs[a] == 'r':
-        s[1] += 1
-      elif self.dirs[a] == 'l':
-        s[1] += -1
-      elif self.dirs[a] == 'u':
-        s[0] += -1
-      elif self.dirs[a] == 'd':
-        s[0] += 1
-      elif self.dirs[a] == 's':
-        s[0] += 0
-      else:
-        print "unknown action"
-              
-      if self.is_terminal(s):
+          s, a, s_nxt, r, is_done = self.step(int(policy[self.pos2idx(s)]))
+          
+      if is_done:
         break
-      if s[0] < 0 or s[0] > self.height-1 or s[1] < 0 or s[1] > self.width-1:
-        print "over the grid"
-        break
-    
-      path_grid[s[0], s[1]] = 1.0
-      
+      path_grid[s[0], s[1]] = 1.0      
       cnt += 1
 
     return path_grid

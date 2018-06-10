@@ -111,13 +111,13 @@ def main():
   rmap_gt[H-1, W-1] = R_MAX
   # rmap_gt[H-1, 0] = R_MAX
 
-  rmap_gt[:,:] = -1
+  rmap_gt[:,:] = -0.1
   rmap_gt[(H-1)/2,:] = -10
-  rmap_gt[(H-1)/2,5:7] = -1
+  rmap_gt[(H-1)/2,5:7] = -0.1
   rmap_gt[(H-1)/2+1,7] = -10
   rmap_gt[(H-1)/2+2,6] = -10
   rmap_gt[(H-1)/2+3,5] = -10
-  rmap_gt[(H-1)/2+4,4] = -10
+  #rmap_gt[(H-1)/2+4,4] = -10
   rmap_gt[H-1, W-1] = R_MAX
 
   gw = gridworld.GridWorld(rmap_gt, {}, 1 - ACT_RAND)
@@ -127,6 +127,17 @@ def main():
 
   values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
   path_gt = gw.display_path_grid(policy_gt)
+
+  #temp
+  ## plt.figure(figsize=(20,4))
+  ## plt.subplot(1, 3, 1)
+  ## img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
+  ## plt.subplot(1, 3, 2)
+  ## img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+  ## plt.subplot(1, 3, 3)
+  ## img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
+  ## plt.show()
+  ## sys.exit()
   
   # use identity matrix as feature
   feat_map = np.eye(N_STATES)
@@ -136,10 +147,12 @@ def main():
   # feat_map = feature_basis(gw)
   # feat_map = feature_coord(gw)
   np.random.seed(1)
-  trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
+  trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ,
+                                  rand_start=RAND_START)
   rewards = maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS)
   
-  values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
+  values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01,
+                                                   deterministic=True)
   path = gw.display_path_grid(policy)
   
   # plots
