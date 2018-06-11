@@ -23,3 +23,12 @@ def sigmoid(xs):
     xs      1d array
   """
   return [1 / (1 + math.exp(-x)) for x in xs]
+
+def manhattan_dist(s1, s2):
+  """
+  Manhattan distance
+  input:
+    s1 1d array
+    s2 1d array
+  """  
+  return abs(s1[0]-s2[0])+abs(s1[1]-s2[1])

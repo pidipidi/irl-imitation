@@ -189,7 +189,7 @@ class GridWorld(object):
   def get_current_state(self):
     return self._cur_state
 
-  def step(self, action):
+  def step(self, action, deterministic=False):
     """
     Step function for the agent to interact with gridworld
     args
@@ -207,9 +207,20 @@ class GridWorld(object):
 
     st_prob = self.get_transition_states_and_probs(self._cur_state, action)
 
-    sampled_idx = np.random.choice(np.arange(0, len(st_prob)), p=[prob for st, prob in st_prob])
-    last_state = self._cur_state
-    next_state = st_prob[sampled_idx][0]
+    if deterministic is False:
+        sampled_idx = np.random.choice(np.arange(0, len(st_prob)), p=[prob for st, prob in st_prob])
+        last_state = self._cur_state
+        next_state = st_prob[sampled_idx][0]
+    else:
+        max_prob = 0
+        max_st   = self._cur_state
+        for st, prob in st_prob:
+            if max_prob <= prob:
+                max_prob = prob
+                max_st    = st
+        last_state  = self._cur_state
+        next_state  = max_st
+        
     reward = self.get_reward(last_state)
     self._cur_state = next_state
     return last_state, action, next_state, reward, False
@@ -318,11 +329,11 @@ class GridWorld(object):
         
     cnt       = 0
     while cnt < max_step:
-
+      # Non-deterministic....
       if dict_policy:
-          s, a, s_nxt, r, is_done = self.step(int(policy[tuple(s)][0][0]))
+          s, a, s_nxt, r, is_done = self.step(int(policy[tuple(s)][0][0]),  True)
       else:
-          s, a, s_nxt, r, is_done = self.step(int(policy[self.pos2idx(s)]))
+          s, a, s_nxt, r, is_done = self.step(int(policy[self.pos2idx(s)]), True)
           
       if is_done:
         break
