@@ -82,20 +82,29 @@ def feature_histogram(gw):
     for i in xrange(N):
         iy, ix = gw.idx2pos(i)
         states[i] = np.array([iy, ix])
+
+
+    # rel pos from goal ----------------------------------------------------
+    feat_goal_dist = np.zeros((N,2))
+    for terminal in terminals:
+        feat_goal_dist[:,0:1] += np.exp(-distance.cdist(states, np.array([[terminal[0],terminal[1]]]), metric='cityblock'))
+        feat_goal_dist[:,1:] += distance.cdist(states, np.array([[0,0]]),
+                                               metric='cityblock')
+
         
-    # rel pos from goal -----------------------------------------------------
+    # rel pos histogram from goal ------------------------------------------
     goal_hist_size = 10
     feat_goal = np.zeros((N,goal_hist_size))
     dists = []
     for terminal in terminals:
         dists.append(distance.cdist(states, np.array([[terminal[0],terminal[1]]]),
-                                    metric='cityblock'))
+                                    metric='euclidean'))
     dists = np.array(dists)
     dists = np.swapaxes(dists, 0,1)
     
     for i, dist_per_s in enumerate(dists):
         hist, _ = np.histogram(dist_per_s, goal_hist_size, range=(0,np.sqrt(200)))
-        feat_goal[i] = hist
+        feat_goal[i] = -hist
             
     # rel pos histogram -----------------------------------------------------
     obj_hist_size = 3
@@ -127,7 +136,8 @@ def feature_histogram(gw):
         hist_y, _ = np.histogram(state[1], pos_hist_size, range=(0,10))
         feat_abs_pos[i] = np.hstack([hist_x, hist_y])
 
-    feat = np.hstack([feat_goal, feat_obj_dist, feat_abs_pos])
+    feat = np.hstack([feat_goal_dist, feat_obj_dist])
+    #feat = np.hstack([feat_goal, feat_obj_dist, feat_abs_pos])
     print "Feature size: ", np.shape(feat)
     return feat
 

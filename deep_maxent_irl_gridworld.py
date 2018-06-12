@@ -76,15 +76,51 @@ def generate_demonstrations(gw, policy, n_trajs=100, len_traj=20, rand_start=Fal
     trajs.append(episode)
   return trajs
 
+def set_rewards():
+
+  # init the gridworld
+  # rmap_gt is the ground truth for rewards
+  rmap_gt = np.zeros([H, W])
+  rmap_gt[H-1, W-1] = R_MAX
+  # rmap_gt[H-1, 0] = R_MAX
+
+  C_RWD = -120
+  rmap_gt[:,:] = 0
+  rmap_gt[(H-1)/2,:] = C_RWD
+  rmap_gt[(H-1)/2,5:7] = 0
+  rmap_gt[(H-1)/2+1,7] = C_RWD
+  rmap_gt[(H-1)/2+2,6] = C_RWD
+  rmap_gt[(H-1)/2+3,5] = C_RWD
+  #rmap_gt[(H-1)/2+4,4] = -10
+  rmap_gt[H-1, W-1] = R_MAX
+
+
+  for i in xrange(H):
+      for j in xrange(W):
+          if rmap_gt[i][j] == C_RWD or rmap_gt[i][j] == R_MAX:
+              continue
+          
+          for ii in xrange(H):
+              for jj in xrange(W):
+                  if i==ii and j==jj: continue
+                  
+                  if rmap_gt[ii][jj] == C_RWD:
+                      r = manhattan_dist((i,j), (ii,jj)) - manhattan_dist((i,j), (H-1,W-1))
+                      if r < rmap_gt[i,j]:
+                          rmap_gt[i,j] = r
+  
+  return rmap_gt
+
 
 def main():
   N_STATES = H * W
   N_ACTIONS = 5
 
-  rmap_gt = np.zeros([H, W])
-  rmap_gt[H-1, W-1] = R_MAX
-  rmap_gt[0, W-1] = R_MAX
-  rmap_gt[H-1, 0] = R_MAX
+  ## rmap_gt = np.zeros([H, W])
+  ## rmap_gt[H-1, W-1] = R_MAX
+  ## rmap_gt[0, W-1] = R_MAX
+  ## rmap_gt[H-1, 0] = R_MAX
+  rmap_gt = set_rewards()
 
   gw = gridworld.GridWorld(rmap_gt, {}, 1 - ACT_RAND)
 
@@ -92,6 +128,7 @@ def main():
   P_a = gw.get_transition_mat()
 
   values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
+  path_gt = gw.display_path_grid(policy_gt)
   
   # use identity matrix as feature
   feat_map = np.eye(N_STATES)
@@ -101,18 +138,46 @@ def main():
   print 'Deep Max Ent IRL training ..'
   rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS)
 
-  values, _ = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
-  # plots
-  plt.figure(figsize=(20,4))
-  plt.subplot(1, 4, 1)
-  img_utils.heatmap2d(np.reshape(rewards_gt, (H,W), order='F'), 'Rewards Map - Ground Truth', block=False)
-  plt.subplot(1, 4, 2)
-  img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
-  plt.subplot(1, 4, 3)
-  img_utils.heatmap2d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
-  plt.subplot(1, 4, 4)
-  img_utils.heatmap2d(np.reshape(values, (H,W), order='F'), 'Value Map - Recovered', block=False)
-  plt.show()
+  values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
+
+
+  cnt = 0
+  while cnt<1:
+      path = gw.display_path_grid(policy)
+
+      # plots
+      plt.figure(figsize=(20,4))
+      plt.subplot(2, 4, 1)
+      img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
+      plt.subplot(2, 4, 2)
+      img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+      plt.subplot(2, 4, 3)
+      img_utils.heatmap2d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
+      plt.subplot(2, 4, 4)
+      img_utils.heatmap2d(np.reshape(values, (H,W), order='F'), 'Value Map - Recovered', block=False)
+
+      plt.subplot(2, 4, 5)
+      img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
+      plt.subplot(2, 4, 7)
+      img_utils.heatmap2d(np.reshape(path, (H,W), order='F'), 'Path Map - Recovered', block=False)
+
+      plt.show()
+      # plt.subplot(2, 2, 4)
+      # img_utils.heatmap3d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
+      cnt+=1
+
+  
+  ## # plots
+  ## plt.figure(figsize=(20,4))
+  ## plt.subplot(1, 4, 1)
+  ## img_utils.heatmap2d(np.reshape(rewards_gt, (H,W), order='F'), 'Rewards Map - Ground Truth', block=False)
+  ## plt.subplot(1, 4, 2)
+  ## img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+  ## plt.subplot(1, 4, 3)
+  ## img_utils.heatmap2d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
+  ## plt.subplot(1, 4, 4)
+  ## img_utils.heatmap2d(np.reshape(values, (H,W), order='F'), 'Value Map - Recovered', block=False)
+  ## plt.show()
 
 
 
