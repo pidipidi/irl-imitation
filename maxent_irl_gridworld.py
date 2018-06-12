@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+plt.rcParams['image.cmap'] = 'jet'
 import argparse
 from collections import namedtuple
 
@@ -41,7 +42,7 @@ LEARNING_RATE = ARGS.learning_rate
 N_ITERS = ARGS.n_iters
 
 R_MAX = 1.0
-C_RWD = -10
+C_RWD = -1
 EMPTY = -0.1
 
 
@@ -83,60 +84,107 @@ def feature_histogram(gw):
         iy, ix = gw.idx2pos(i)
         states[i] = np.array([iy, ix])
 
-
-    # rel pos from goal ----------------------------------------------------
-    feat_goal_dist = np.zeros((N,2))
-    for terminal in terminals:
-        feat_goal_dist[:,0:1] += np.exp(-distance.cdist(states, np.array([[terminal[0],terminal[1]]]), metric='cityblock'))
-        feat_goal_dist[:,1:] += distance.cdist(states, np.array([[0,0]]),
-                                               metric='cityblock')
-
-        
-    # rel pos histogram from goal ------------------------------------------
-    goal_hist_size = 10
-    feat_goal = np.zeros((N,goal_hist_size))
-    dists = []
-    for terminal in terminals:
-        dists.append(distance.cdist(states, np.array([[terminal[0],terminal[1]]]),
-                                    metric='euclidean'))
-    dists = np.array(dists)
-    dists = np.swapaxes(dists, 0,1)
-    
-    for i, dist_per_s in enumerate(dists):
-        hist, _ = np.histogram(dist_per_s, goal_hist_size, range=(0,np.sqrt(200)))
-        feat_goal[i] = -hist
-            
-    # rel pos histogram -----------------------------------------------------
-    obj_hist_size = 3
-    feat_obj_dist = np.zeros((N,obj_hist_size))
     grid = gw.get_grid()
     objs = []
-    for iy in xrange(len(grid)):
-        for ix in xrange(len(grid[iy])):
-            if grid[iy,ix] == C_RWD:
-                objs.append((iy,ix))
+    for i in xrange(N):
+        iy, ix = gw.idx2pos(i)
+        if grid[iy,ix] == C_RWD:
+            objs.append((iy,ix))
+
+
+    # rel pos from goal ----------------------------------------------------
+    goal_hist_size = 10
+
+    dists = []
+    for terminal in terminals:
+        dists.append(distance.cdist(states, np.array([[terminal[0],terminal[1]]]), metric='cityblock'))
+    dists = np.swapaxes(dists, 0,1)
+    dists = np.amin(dists, axis=-1)
+    dists_sq = dists**2
+    
+    dists = np.amax(dists)-dists
+    dists_sq = np.amax(dists_sq)-dists_sq
+
+    feat_goal_dist = np.zeros((N,goal_hist_size))
+    for i, dist_per_s in enumerate(dists):
+        hist, _ = np.histogram(dist_per_s, goal_hist_size, range=(0,np.amax(dists)))
+        feat_goal_dist[i] = hist
+
+    feat_goal_dist_sq = np.zeros((N,goal_hist_size))
+    for i, dist_per_s in enumerate(dists_sq):
+        hist, _ = np.histogram(dist_per_s, goal_hist_size, range=(0,np.amax(dists_sq)))
+        feat_goal_dist_sq[i] = hist
+
+    # rel pos from start ----------------------------------------------------
+    ## start_hist_size = 10
+    ## feat_start_dist = np.zeros((N,start_hist_size))
+
+    ## dists = distance.cdist(states, np.array([[0,0]]), metric='cityblock')**2
+
+    ## for i, dist_per_s in enumerate(dists):
+    ##     hist, _ = np.histogram(dist_per_s, start_hist_size, range=(0,np.amax(dists)))
+    ##     feat_start_dist[i] = hist
+
+    # done ------------------------------------------
+    feat_done = np.zeros((N,1))
+
+    for i, state in enumerate(states):
+        if tuple(state) in terminals:
+            feat_done[i][0] = 1.
+        else:
+            feat_done[i][0] = 0.
+
+    # collision ------------------------------------------
+    feat_collision = np.zeros((N,1))
+
+    for i, state in enumerate(states):
+        if tuple(state) in objs:
+            feat_collision[i][0] = 0.
+        else:
+            feat_collision[i][0] = 1.
+
+    # rel pos histogram -----------------------------------------------------
+    obj_hist_size = 5
+    feat_obj_dist = np.zeros((N,obj_hist_size))
+    feat_obj_dist_min = np.zeros((N,obj_hist_size))
+    ## feat_obj_avg_dist = np.zeros((N,obj_hist_size))
 
     dists = []
     for obj in objs:
         dists.append(distance.cdist(states, np.array([obj]),
-                                    metric='euclidean'))
-    dists = np.array(dists)
+                                    metric='cityblock'))
+    dists = np.squeeze(np.array(dists))
     dists = np.swapaxes(dists, 0,1)
+    dists_avg = np.mean(dists, axis=-1)
+    dists_min = np.amin(dists, axis=-1)
 
-    for i, dist_per_s in enumerate(dists):
-        hist, _ = np.histogram(dist_per_s, obj_hist_size, range=(0,np.sqrt(200)))
+
+    for i, dist_per_s in enumerate(dists_avg):
+        hist, _ = np.histogram(dist_per_s, obj_hist_size, range=(0,np.amax(dists_avg)))
         feat_obj_dist[i] = hist
 
-    # abs pos histogram -----------------------------------------------------
-    pos_hist_size = 10
-    feat_abs_pos = np.zeros((N,pos_hist_size*2))
+    for i, dist_per_s in enumerate(dists_min):
+        hist, _ = np.histogram(dist_per_s, obj_hist_size, range=(0,np.amax(dists_min)))
+        feat_obj_dist_min[i] = hist
 
-    for i, state in enumerate(states):
-        hist_x, _ = np.histogram(state[0], pos_hist_size, range=(0,10))
-        hist_y, _ = np.histogram(state[1], pos_hist_size, range=(0,10))
-        feat_abs_pos[i] = np.hstack([hist_x, hist_y])
+        ## rmap_gt = set_rewards2()
+        ## iy, ix = gw.idx2pos(i)
+        ## rmap_gt[iy,ix] = 10
+        
+        ## plt.figure(figsize=(20,4))
+        ## plt.subplot(1, 2, 1)        
+        ## img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
+        ## plt.subplot(1, 2, 2)        
+        ## plt.hist(dist_per_s, obj_hist_size, range=(0,np.amax(dists)))
+        ## plt.show()
+        
+        ## print hist
+        ## ## sys.exit()
+    
 
-    feat = np.hstack([feat_goal_dist, feat_obj_dist])
+    feat = np.hstack([feat_goal_dist, feat_goal_dist_sq, feat_collision, feat_done])
+    #,feat_done,  feat_obj_dist_min])#, feat_obj_dist, ])
+    ## feat = np.hstack([feat_goal_dist, feat_start_dist, feat_collision])#, feat_obj_dist, feat_obj_dist_min])
     #feat = np.hstack([feat_goal, feat_obj_dist, feat_abs_pos])
     print "Feature size: ", np.shape(feat)
     return feat
@@ -176,86 +224,70 @@ def generate_demonstrations(gw, policy, n_trajs=100, len_traj=20, rand_start=Fal
   return trajs
 
 
+
 def set_rewards():
 
   # init the gridworld
   # rmap_gt is the ground truth for rewards
-  rmap_gt = np.zeros([H, W])
-  rmap_gt[H-1, W-1] = R_MAX
-  # rmap_gt[H-1, 0] = R_MAX
+  rmap_gt = np.zeros([H, W])+EMPTY
+  rmap_gt = rmap_gt.tolist()
 
-  rmap_gt[:,:] = 0
-  rmap_gt[(H-1)/2,:] = C_RWD
-  rmap_gt[(H-1)/2,5:7] = 0
-  rmap_gt[(H-1)/2+1,7] = C_RWD
-  rmap_gt[(H-1)/2+2,6] = C_RWD
-  rmap_gt[(H-1)/2+3,5] = C_RWD
-  #rmap_gt[(H-1)/2+4,4] = -10
-  rmap_gt[H-1, W-1] = R_MAX
+  for i in xrange(int((W-1)*0.5)):
+    rmap_gt[(H-1)/2][i] = 'x'
+  for i in xrange(int((W-1)*0.7),W):
+    rmap_gt[(H-1)/2][i] = 'x'
+  for i in xrange((H-1)/2,int((H-1)*0.8)):
+    rmap_gt[i][int((W-1)*0.7)] = 'x'
+  for i in xrange(int((W-1)*0.5),int((W-1)*0.7)):
+    rmap_gt[int((H-1)*0.8)][i] = 'x'    
+  rmap_gt[H-1][W-1] = R_MAX
 
-
-  for i in xrange(H):
-      for j in xrange(W):
-          if rmap_gt[i][j] == C_RWD or rmap_gt[i][j] == R_MAX:
-              continue
-          
-          for ii in xrange(H):
-              for jj in xrange(W):
-                  if i==ii and j==jj: continue
-                  
-                  if rmap_gt[ii][jj] == C_RWD:
-                      r = manhattan_dist((i,j), (ii,jj)) - manhattan_dist((i,j), (H-1,W-1))
-                      if r < rmap_gt[i,j]:
-                          rmap_gt[i,j] = r
-  
   return rmap_gt
 
-def set_rewards2():
+
+def set_rewards_passage():
 
   # init the gridworld
   # rmap_gt is the ground truth for rewards
   rmap_gt = np.zeros([H, W])+EMPTY
-  rmap_gt[(H-1)/2,:]   = C_RWD
-  rmap_gt[(H-1)/2,5:7] = EMPTY
-  rmap_gt[(H-1)/2+1,7] = C_RWD
-  rmap_gt[(H-1)/2+2,6] = C_RWD
-  rmap_gt[(H-1)/2+3,5] = C_RWD
-  #rmap_gt[(H-1)/2+4,4] = -10
+  rmap_gt[(H-1)/2,:int((W-1)*0.5)] = 'x'
+  rmap_gt[(H-1)/2,int((W-1)*0.7):] = 'x'
+  rmap_gt[(H-1)/2:int((H-1)*0.8):,int((W-1)*0.7)] = 'x'
+  rmap_gt[int((H-1)*0.8),int((W-1)*0.5):int((W-1)*0.7)] = 'x'
   rmap_gt[H-1, W-1] = R_MAX
 
   return rmap_gt
+
+
 
 
 def main():
   N_STATES  = H * W
   N_ACTIONS = 4
 
-  rmap_gt = set_rewards2()
+  rmap_gt = set_rewards()
   gw = gridworld.GridWorld(rmap_gt, {(H-1,W-1)}, 1 - ACT_RAND)
-
+  
   rewards_gt = np.reshape(rmap_gt, H*W, order='F')
   P_a = gw.get_transition_mat()
-
   values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
   path_gt = gw.display_path_grid(policy_gt)
 
-  ## #temp
-  ## plt.figure(figsize=(20,4))
-  ## plt.subplot(1, 3, 1)
-  ## img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
-  ## plt.subplot(1, 3, 2)
-  ## img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
-  ## plt.subplot(1, 3, 3)
-  ## img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
-  ## plt.show()
-  ## sys.exit()
-  
-  # use identity matrix as feature
-  #feat_map = np.eye(N_STATES)
+  rmap_gt = gw.get_reward_mat()
 
-  # other two features. due to the linear nature, 
-  # the following two features might not work as well as the identity.
-  ## feat_map = feature_basis(gw)
+  #temp
+  plt.figure(figsize=(20,4))
+  plt.subplot(1, 3, 1)
+  img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
+  plt.subplot(1, 3, 2)
+  img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+  plt.subplot(1, 3, 3)
+  img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
+  plt.show()
+  sys.exit()
+  
+  # feat_map = np.eye(N_STATES)
+  # feat_map = feature_basis(gw)
   # feat_map = feature_coord(gw)
   feat_map = feature_histogram(gw)
   
@@ -265,8 +297,6 @@ def main():
   rewards = maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS)
   values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01,
                                                    deterministic=True)
-
-
   path = gw.display_path_grid(policy)
 
   # plots

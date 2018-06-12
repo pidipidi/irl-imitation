@@ -35,8 +35,8 @@ class GridWorld(object):
     self.actions = [0, 1, 2, 3, 4]
     self.n_actions = len(self.actions)
     # self.dirs = {0: 's', 1: 'r', 2: 'l', 3: 'd', 4: 'u'}
-    self.dirs = {0: 'r', 1: 'l', 2: 'd', 3: 'u'}
-    ## self.dirs = {0: 'r', 1: 'l', 2: 'd', 3: 'u', 4: 's'}
+    #self.dirs = {0: 'r', 1: 'l', 2: 'd', 3: 'u'}
+    self.dirs = {0: 'r', 1: 'l', 2: 'd', 3: 'u', 4: 's'}
     #              right,    left,   down,   up ,   stay
     # self.action_nei = {0: (0,1), 1:(0,-1), 2:(1,0), 3:(-1,0)}
 
@@ -403,8 +403,11 @@ class GridWorld(object):
     shape = np.shape(self.grid)
     r_mat = np.zeros(shape)
     for i in range(shape[0]):
-      for j in range(shape[1]):
-        r_mat[i, j] = float(self.grid[i][j])
+        for j in range(shape[1]):
+            if self.grid[i][j] == 'x':
+                r_mat[i, j] = -1
+            else:
+                r_mat[i, j] = float(self.grid[i][j])
     return r_mat
 
   def pos2idx(self, pos):
