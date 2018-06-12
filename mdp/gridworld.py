@@ -35,7 +35,8 @@ class GridWorld(object):
     self.actions = [0, 1, 2, 3, 4]
     self.n_actions = len(self.actions)
     # self.dirs = {0: 's', 1: 'r', 2: 'l', 3: 'd', 4: 'u'}
-    self.dirs = {0: 'r', 1: 'l', 2: 'd', 3: 'u', 4: 's'}
+    self.dirs = {0: 'r', 1: 'l', 2: 'd', 3: 'u'}
+    ## self.dirs = {0: 'r', 1: 'l', 2: 'd', 3: 'u', 4: 's'}
     #              right,    left,   down,   up ,   stay
     # self.action_nei = {0: (0,1), 1:(0,-1), 2:(1,0), 3:(-1,0)}
 
@@ -78,6 +79,9 @@ class GridWorld(object):
               1] < self.width and self.grid[nei_s[0]][nei_s[1]] != 'x':
         actions.append(a)
     return actions
+
+  def get_terminals(self):
+    return self.terminals
 
   def __get_action_states(self, state):
     """
@@ -308,7 +312,7 @@ class GridWorld(object):
     for row in policy_grid:
       print row_format.format(*row)
 
-  def display_path_grid(self, policy, s0=None):
+  def display_path_grid(self, policy, s0=None, n_trajs=50):
     """
     prints a nice path on the grid
     input:
@@ -322,23 +326,32 @@ class GridWorld(object):
     if type(policy) is dict:
         dict_policy = True
 
-    s         = s0 if s0 is not None else [0,0]
-    self.reset(s)
     path_grid = np.zeros(np.shape(self.grid))
-    path_grid[s[0],s[1]] = 1.0      
-        
-    cnt       = 0
-    while cnt < max_step:
-      # Non-deterministic....
-      if dict_policy:
-          s, a, s_nxt, r, is_done = self.step(int(policy[tuple(s)][0][0]),  True)
-      else:
-          s, a, s_nxt, r, is_done = self.step(int(policy[self.pos2idx(s)]), True)
-          
-      if is_done:
-        break
-      path_grid[s[0], s[1]] = 1.0      
-      cnt += 1
+    for i in xrange(n_trajs):    
+        s         = s0 if s0 is not None else [0,0]
+        self.reset(s)
+        path_grid_temp = np.zeros(np.shape(self.grid))
+        path_grid_temp[s[0],s[1]] += 1.0      
+
+        cnt     = 0
+        is_done = False
+        while cnt < max_step:
+          # Non-deterministic....
+          if dict_policy:
+              s, a, s_nxt, r, is_done = self.step(int(policy[tuple(s)][0][0]),  True)
+          else:
+              s, a, s_nxt, r, is_done = self.step(int(policy[self.pos2idx(s)]), True)
+
+          path_grid_temp[s[0], s[1]] += 1.0      
+          if is_done:
+            break
+          cnt += 1
+
+        if is_done or True:
+            path_grid += path_grid_temp
+
+    if np.amax(path_grid)>0:
+        path_grid /= np.amax(path_grid)
 
     return path_grid
     

@@ -40,6 +40,11 @@ RAND_START = ARGS.rand_start
 LEARNING_RATE = ARGS.learning_rate
 N_ITERS = ARGS.n_iters
 
+R_MAX = 1.0
+C_RWD = -10
+EMPTY = -0.1
+
+
 def feature_coord(gw):
   N = gw.height * gw.width
   feat = np.zeros([N, 2])
@@ -65,6 +70,66 @@ def feature_basis(gw):
         iy, ix = gw.idx2pos(i)
         feat[i, gw.pos2idx([y, x])] = abs(iy-y) + abs(ix-x)
   return feat
+
+def feature_histogram(gw):
+    from scipy.spatial import distance
+        
+    N = gw.height * gw.width
+    terminals = gw.get_terminals()
+    ## M = 100 # number of features
+    ## feat = np.zeros([N,M])
+    states = np.zeros((N,2))
+    for i in xrange(N):
+        iy, ix = gw.idx2pos(i)
+        states[i] = np.array([iy, ix])
+        
+    # rel pos from goal -----------------------------------------------------
+    goal_hist_size = 10
+    feat_goal = np.zeros((N,goal_hist_size))
+    dists = []
+    for terminal in terminals:
+        dists.append(distance.cdist(states, np.array([[terminal[0],terminal[1]]]),
+                                    metric='cityblock'))
+    dists = np.array(dists)
+    dists = np.swapaxes(dists, 0,1)
+    
+    for i, dist_per_s in enumerate(dists):
+        hist, _ = np.histogram(dist_per_s, goal_hist_size, range=(0,np.sqrt(200)))
+        feat_goal[i] = hist
+            
+    # rel pos histogram -----------------------------------------------------
+    obj_hist_size = 3
+    feat_obj_dist = np.zeros((N,obj_hist_size))
+    grid = gw.get_grid()
+    objs = []
+    for iy in xrange(len(grid)):
+        for ix in xrange(len(grid[iy])):
+            if grid[iy,ix] == C_RWD:
+                objs.append((iy,ix))
+
+    dists = []
+    for obj in objs:
+        dists.append(distance.cdist(states, np.array([obj]),
+                                    metric='euclidean'))
+    dists = np.array(dists)
+    dists = np.swapaxes(dists, 0,1)
+
+    for i, dist_per_s in enumerate(dists):
+        hist, _ = np.histogram(dist_per_s, obj_hist_size, range=(0,np.sqrt(200)))
+        feat_obj_dist[i] = hist
+
+    # abs pos histogram -----------------------------------------------------
+    pos_hist_size = 10
+    feat_abs_pos = np.zeros((N,pos_hist_size*2))
+
+    for i, state in enumerate(states):
+        hist_x, _ = np.histogram(state[0], pos_hist_size, range=(0,10))
+        hist_y, _ = np.histogram(state[1], pos_hist_size, range=(0,10))
+        feat_abs_pos[i] = np.hstack([hist_x, hist_y])
+
+    feat = np.hstack([feat_goal, feat_obj_dist, feat_abs_pos])
+    print "Feature size: ", np.shape(feat)
+    return feat
 
 
 def generate_demonstrations(gw, policy, n_trajs=100, len_traj=20, rand_start=False, start_pos=[0,0]):
@@ -109,7 +174,6 @@ def set_rewards():
   rmap_gt[H-1, W-1] = R_MAX
   # rmap_gt[H-1, 0] = R_MAX
 
-  C_RWD = -120
   rmap_gt[:,:] = 0
   rmap_gt[(H-1)/2,:] = C_RWD
   rmap_gt[(H-1)/2,5:7] = 0
@@ -136,28 +200,28 @@ def set_rewards():
   
   return rmap_gt
 
+def set_rewards2():
+
+  # init the gridworld
+  # rmap_gt is the ground truth for rewards
+  rmap_gt = np.zeros([H, W])+EMPTY
+  rmap_gt[(H-1)/2,:]   = C_RWD
+  rmap_gt[(H-1)/2,5:7] = EMPTY
+  rmap_gt[(H-1)/2+1,7] = C_RWD
+  rmap_gt[(H-1)/2+2,6] = C_RWD
+  rmap_gt[(H-1)/2+3,5] = C_RWD
+  #rmap_gt[(H-1)/2+4,4] = -10
+  rmap_gt[H-1, W-1] = R_MAX
+
+  return rmap_gt
+
 
 def main():
-  N_STATES = H * W
-  N_ACTIONS = 5
+  N_STATES  = H * W
+  N_ACTIONS = 4
 
-  ## # init the gridworld
-  ## # rmap_gt is the ground truth for rewards
-  ## rmap_gt = np.zeros([H, W])
-  ## rmap_gt[H-1, W-1] = R_MAX
-  ## # rmap_gt[H-1, 0] = R_MAX
-
-  ## rmap_gt[:,:] = -0.1
-  ## rmap_gt[(H-1)/2,:] = -10
-  ## rmap_gt[(H-1)/2,5:7] = -0.1
-  ## rmap_gt[(H-1)/2+1,7] = -10
-  ## rmap_gt[(H-1)/2+2,6] = -10
-  ## rmap_gt[(H-1)/2+3,5] = -10
-  ## #rmap_gt[(H-1)/2+4,4] = -10
-  ## rmap_gt[H-1, W-1] = R_MAX
-  rmap_gt = set_rewards()
-
-  gw = gridworld.GridWorld(rmap_gt, {}, 1 - ACT_RAND)
+  rmap_gt = set_rewards2()
+  gw = gridworld.GridWorld(rmap_gt, {(H-1,W-1)}, 1 - ACT_RAND)
 
   rewards_gt = np.reshape(rmap_gt, H*W, order='F')
   P_a = gw.get_transition_mat()
@@ -177,12 +241,14 @@ def main():
   ## sys.exit()
   
   # use identity matrix as feature
-  feat_map = np.eye(N_STATES)
+  #feat_map = np.eye(N_STATES)
 
   # other two features. due to the linear nature, 
   # the following two features might not work as well as the identity.
-  # feat_map = feature_basis(gw)
+  ## feat_map = feature_basis(gw)
   # feat_map = feature_coord(gw)
+  feat_map = feature_histogram(gw)
+  
   np.random.seed(1)
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ,
                                   rand_start=RAND_START)
@@ -191,30 +257,23 @@ def main():
                                                    deterministic=True)
 
 
-  cnt = 0
-  while cnt<1:
-      path = gw.display_path_grid(policy)
+  path = gw.display_path_grid(policy)
 
-      # plots
-      plt.figure(figsize=(20,4))
-      plt.subplot(2, 4, 1)
-      img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
-      plt.subplot(2, 4, 2)
-      img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
-      plt.subplot(2, 4, 3)
-      img_utils.heatmap2d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
-      plt.subplot(2, 4, 4)
-      img_utils.heatmap2d(np.reshape(values, (H,W), order='F'), 'Value Map - Recovered', block=False)
-
-      plt.subplot(2, 4, 5)
-      img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
-      plt.subplot(2, 4, 7)
-      img_utils.heatmap2d(np.reshape(path, (H,W), order='F'), 'Path Map - Recovered', block=False)
-
-      plt.show()
-      # plt.subplot(2, 2, 4)
-      # img_utils.heatmap3d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
-      cnt+=1
+  # plots
+  plt.figure(figsize=(20,4))
+  plt.subplot(2, 4, 1)
+  img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
+  plt.subplot(2, 4, 2)
+  img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+  plt.subplot(2, 4, 3)
+  img_utils.heatmap2d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
+  plt.subplot(2, 4, 4)
+  img_utils.heatmap2d(np.reshape(values, (H,W), order='F'), 'Value Map - Recovered', block=False)
+  plt.subplot(2, 4, 5)
+  img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
+  plt.subplot(2, 4, 7)
+  img_utils.heatmap2d(np.reshape(path, (H,W), order='F'), 'Path Map - Recovered', block=False)
+  plt.show()
 
 if __name__ == "__main__":
   main()
