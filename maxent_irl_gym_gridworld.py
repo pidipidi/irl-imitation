@@ -1,6 +1,6 @@
 import gym
 import gym.spaces
-## import sys
+import sys
 ## sys.path.append("/home/dpark/git/external/gym-gridworld")
 import gym_gridworld
 
@@ -17,12 +17,13 @@ class RandomAgent(object):
 class CustomAgent(object):
     """ """
     def __init__(self, observation_space, action_space):
-        self.observation_space = observation_space
+        #self.observation_space = observation_space
         self.action_space = action_space
 
     def act(self, state, reward, done):
-        Q = np.zeros([self.observation_space.n, self.action_space.n])
-        return np.argmax(Q[state])
+        #Q = np.zeros([self.observation_space.n, self.action_space.n])
+        return self.action_space.sample()
+        ## return np.argmax(Q[state])
 
 def random_motion(env):
     agent = RandomAgent(env.action_space)
@@ -54,8 +55,6 @@ if __name__ == '__main__':
     
     for i in range(episode_count):
         state_now = env.reset()
-        print np.shape(state_now)
-        sys.exit()
         agent = CustomAgent(env.observation_space, env.action_space)
         reward = 0
         done = False

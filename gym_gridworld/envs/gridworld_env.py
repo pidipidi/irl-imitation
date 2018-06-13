@@ -9,17 +9,22 @@ import numpy as np
 from PIL import Image as Image
 import matplotlib.pyplot as plt
 
+EMPTY = 0
+WALL  = 1
+GOAL  = 3
+START = 4
+
 # define colors
 # 0: black; 1 : gray; 2 : blue; 3 : green; 4 : red
-COLORS = {0:[0.0,0.0,0.0], 1:[0.5,0.5,0.5], \
-          2:[0.0,0.0,1.0], 3:[0.0,1.0,0.0], \
-          4:[1.0,0.0,0.0], 6:[1.0,0.0,1.0], \
+COLORS = {EMPTY:[0.0,0.0,0.0], WALL:[0.5,0.5,0.5], \
+          2:[0.0,0.0,1.0], GOAL:[0.0,1.0,0.0], \
+          START:[1.0,0.0,0.0], 6:[1.0,0.0,1.0], \
           7:[1.0,1.0,0.0]}
 
 class GridworldEnv(gym.Env):
     metadata = {'render.modes': ['human']}
     num_env = 0 
-    def __init__(self):
+    def __init__(self, terminal_reward=1.0, wall_reward=0.0, step_reward=0.0):
         self.actions = [0, 1, 2, 3, 4]
         self.inv_actions = [0, 2, 1, 4, 3]
         self.action_space = spaces.Discrete(5)
@@ -29,11 +34,9 @@ class GridworldEnv(gym.Env):
         self.obs_shape = [128, 128, 3]  # observation space shape
         self.observation_space = spaces.Box(low=0, high=1, shape=self.obs_shape)
 
-        self.seed()
-        
         ''' initialize system state ''' 
         this_file_path = os.path.dirname(os.path.realpath(__file__))
-        self.grid_map_path = os.path.join(this_file_path, 'dpark1.txt')        
+        self.grid_map_path = os.path.join(this_file_path, 'plan0.txt')        
         self.start_grid_map = self._read_grid_map(self.grid_map_path) # initial grid map
         self.current_grid_map = copy.deepcopy(self.start_grid_map)  # current grid map
         self.observation = self._gridmap_to_observation(self.start_grid_map)
@@ -49,7 +52,12 @@ class GridworldEnv(gym.Env):
         ''' set other parameters '''
         self.restart_once_done = False  # restart or not once done
         self.verbose = False # to show the environment or not
-
+        self.seed()
+        self.terminal_reward = terminal_reward
+        self.wall_reward = wall_reward
+        self.step_reward = step_reward
+        self.is_done = False
+        
         GridworldEnv.num_env += 1
         self.this_fig_num = GridworldEnv.num_env 
         if self.verbose == True:
@@ -67,32 +75,33 @@ class GridworldEnv(gym.Env):
         action = int(action)
         info = {}
         info['success'] = False
+        self.is_done    = False
         nxt_agent_state = (self.agent_state[0] + self.action_pos_dict[action][0],
                             self.agent_state[1] + self.action_pos_dict[action][1])
         if action == 0: # stay in place
             info['success'] = True
-            return (self.observation, 0, False, info) 
-        if nxt_agent_state[0] < 0 or nxt_agent_state[0] >= self.grid_map_shape[0]:
+            return (self.observation, self.step_reward, self.is_done, info)
+        # Out of space
+        if (nxt_agent_state[0] < 0 or nxt_agent_state[0] >= self.grid_map_shape[0]) or \
+          (nxt_agent_state[1] < 0 or nxt_agent_state[1] >= self.grid_map_shape[1]):
             info['success'] = False
-            return (self.observation, 0, False, info)
-        if nxt_agent_state[1] < 0 or nxt_agent_state[1] >= self.grid_map_shape[1]:
-            info['success'] = False
-            return (self.observation, 0, False, info)
+            return (self.observation, self.wall_reward, self.is_done, info)
+        
         # successful behavior
         org_color = self.current_grid_map[self.agent_state[0], self.agent_state[1]]
         new_color = self.current_grid_map[nxt_agent_state[0], nxt_agent_state[1]]
-        if new_color == 0:
-            if org_color == 4:
-                self.current_grid_map[self.agent_state[0], self.agent_state[1]] = 0
-                self.current_grid_map[nxt_agent_state[0], nxt_agent_state[1]] = 4
+        if new_color == EMPTY:
+            if org_color == START:
+                self.current_grid_map[self.agent_state[0], self.agent_state[1]] = EMPTY
+                self.current_grid_map[nxt_agent_state[0], nxt_agent_state[1]] = START
             elif org_color == 6 or org_color == 7:
                 self.current_grid_map[self.agent_state[0], self.agent_state[1]] = org_color-4 
                 self.current_grid_map[nxt_agent_state[0], nxt_agent_state[1]] = 4
             self.agent_state = copy.deepcopy(nxt_agent_state)
-        elif new_color == 1: # gray
+        elif new_color == WALL: # gray
             info['success'] = False
-            return (self.observation, 0, False, info)
-        elif new_color == 2 or new_color == 3:
+            return (self.observation, self.wall_reward, self.is_done, info)
+        elif new_color == 2 or new_color == GOAL:
             self.current_grid_map[self.agent_state[0], self.agent_state[1]] = 0
             self.current_grid_map[nxt_agent_state[0], nxt_agent_state[1]] = new_color+4
             self.agent_state = copy.deepcopy(nxt_agent_state)
@@ -100,23 +109,26 @@ class GridworldEnv(gym.Env):
         self.render()
         if nxt_agent_state[0] == self.agent_target_state[0] and nxt_agent_state[1] == self.agent_target_state[1] :
             target_observation = copy.deepcopy(self.observation)
+            self.is_done = True
             if self.restart_once_done:
                 self.observation = self.reset()
                 info['success'] = True
-                return (self.observation, 1, True, info)
+                return (self.observation, 1, self.is_done, info)
             else:
                 info['success'] = True
-                return (target_observation, 1, True, info)
+                return (target_observation, 1, self.is_done, info)
         else:
             info['success'] = True
-            return (self.observation, 0, False, info)
+            return (self.observation, 0, self.is_done, info)
 
     def reset(self):
         self.agent_state = copy.deepcopy(self.agent_start_state)
         self.current_grid_map = copy.deepcopy(self.start_grid_map)
         self.observation = self._gridmap_to_observation(self.start_grid_map)
         self.render()
-        return self.observation
+        return self.agent_state
+        #return self.observation
+
 
     def _read_grid_map(self, grid_map_path):
         grid_map = open(grid_map_path, 'r').readlines()
@@ -226,6 +238,7 @@ class GridworldEnv(gym.Env):
         ''' move agent to another state '''
         info = {}
         info['success'] = True
+        self.is_done    = False
         if self.current_grid_map[to_state[0], to_state[1]] == 0:
             if self.current_grid_map[self.agent_state[0], self.agent_state[1]] == 4:
                 self.current_grid_map[self.agent_state[0], self.agent_state[1]] = 0
@@ -233,39 +246,40 @@ class GridworldEnv(gym.Env):
                 self.observation = self._gridmap_to_observation(self.current_grid_map)
                 self.agent_state = [to_state[0], to_state[1]]
                 self.render()
-                return (self.observation, 0, False, info)
+                return (self.observation, 0, self.is_done, info)
             if self.current_grid_map[self.agent_state[0], self.agent_state[1]] == 6:
                 self.current_grid_map[self.agent_state[0], self.agent_state[1]] = 2
                 self.current_grid_map[to_state[0], to_state[1]] = 4
                 self.observation = self._gridmap_to_observation(self.current_grid_map)
                 self.agent_state = [to_state[0], to_state[1]]
                 self.render()
-                return (self.observation, 0, False, info)
+                return (self.observation, 0, self.is_done, info)
             if self.current_grid_map[self.agent_state[0], self.agent_state[1]] == 7:  
                 self.current_grid_map[self.agent_state[0], self.agent_state[1]] = 3
                 self.current_grid_map[to_state[0], to_state[1]] = 4
                 self.observation = self._gridmap_to_observation(self.current_grid_map)
                 self.agent_state = [to_state[0], to_state[1]]
                 self.render()
-                return (self.observation, 0, False, info)
+                return (self.observation, 0, self.is_done, info)
         elif self.current_grid_map[to_state[0], to_state[1]] == 4:
-            return (self.observation, 0, False, info)
+            return (self.observation, 0, self.is_done, info)
         elif self.current_grid_map[to_state[0], to_state[1]] == 1:
             info['success'] = False
-            return (self.observation, 0, False, info)
+            return (self.observation, 0, self.is_done, info)
         elif self.current_grid_map[to_state[0], to_state[1]] == 3:
             self.current_grid_map[self.agent_state[0], self.agent_state[1]] = 0
             self.current_grid_map[to_state[0], to_state[1]] = 7
             self.agent_state = [to_state[0], to_state[1]]
             self.observation = self._gridmap_to_observation(self.current_grid_map)
             self.render()
+            self.is_done = True
             if self.restart_once_done:
                 self.observation = self.reset()
-                return (self.observation, 1, True, info)
-            return (self.observation, 1, True, info)
+                return (self.observation, 1, self.is_done, info)
+            return (self.observation, 1, self.is_done, info)
         else:
             info['success'] = False
-            return (self.observation, 0, False, info)
+            return (self.observation, 0, self.is_done, info)
 
     def _close_env(self):
         plt.close(1)
