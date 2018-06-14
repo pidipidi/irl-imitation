@@ -22,6 +22,7 @@ class CustomAgent(object):
 
     def act(self, state, reward, done):
         #Q = np.zeros([self.observation_space.n, self.action_space.n])
+        
         return self.action_space.sample()
         ## return np.argmax(Q[state])
 
