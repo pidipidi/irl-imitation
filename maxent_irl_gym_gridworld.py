@@ -8,155 +8,131 @@ import random
 import copy
 import pickle
 
-class ValueIterationAgent(object):
-    """ """
-    def __init__(self, env, gamma=0.9, learning_rate=0.01):
-        """
-        inputs:
-        env          Object  - Open AI Gym environment
-        n_state      Integer - number of states (HxW)
-        action_space Object  - ?
-        rewards      ?
-        gamma        float - RL discount
-        error        float - threshold for a stop        
+import valueiteration_gym_gridworld as vg
+from maxent_irl import *
+
+
+def generate_demonstrations(env, agent, n_trajs=100, len_traj=20, rand_start=False):
+
+    trajs = []
+    for i in range(n_trajs):
+        if rand_start:
+            # override start_pos
+            start_pos = [np.random.randint(0, env.grid_map_shape[0]),
+                         np.random.randint(0, env.grid_map_shape[1])]
+            env.change_start_state(start_pos)
+    
+        state_now = env.reset()
         
-        """
-        self.env      = env
-        self.n_state  = env.grid_map_shape[0]*env.grid_map_shape[1]
-        self.n_action = env.action_space.n
-        ## self.action_space = action_space
-        ## self.value_table  = np.zeros(n_state) #value table
+        episode = []
+        episode.append(Step(cur_state=env.pos2idx(state_now), action=None,
+                            next_state=None, reward=None, done=False))
         
-        self.gamma         = gamma # discount factor
-        self.learning_rate = learning_rate
-
-        self.T      = self._create_trainsition_mtx()
-        self.values = None
-        self.policy = None
-
-    def _create_trainsition_mtx(self):
-        T = np.zeros((self.n_state, self.n_action, self.n_state))
-
-        for i in range(self.n_state):
-            for a1 in range(self.n_action):
-                s = self.env.idx2pos(i)
-                for a2 in range(self.n_action):
-                    s_next = [s[0] + self.env.action_pos_dict[a2][0],
-                              s[1] + self.env.action_pos_dict[a2][1]]
-
-                    # Out of boundary
-                    if s_next[0]<0 or s_next[0]>=self.env.grid_map_shape[0] or\
-                      s_next[1]<0 or s_next[1]>=self.env.grid_map_shape[1]:    
-                        continue
-
-                    # Wall
-                    if self.env.checkOnWALL(s_next):
-                        continue
-
-                    if a2 == 0:
-                        T[i,a1,self.env.pos2idx(s_next)] = 0.0 # no action
-                    elif a1 == a2:
-                        T[i,a1,self.env.pos2idx(s_next)] = 0.7
-                    else:
-                        T[i,a1,self.env.pos2idx(s_next)] = 0.1
-                        
-        return T
-
-
-    def value_iteration(self, error=0.01, deterministic=False):
-        """
-        inputs:
-        """
-        values = np.zeros([self.n_state])
-        ## value_table_next = np.zeros(self.n_state) #value table
-
-        # update each state
-        while True:
-            values_tmp = values.copy()
-            
-            for s in range(self.n_state):
-                v_s = []
-                values[s] = max([sum([self.T[s, a, s1]*(self.env.get_reward(self.env.idx2pos(s))+\
-                                                        self.gamma*values_tmp[s1])\
-                                                        for s1 in range(self.n_state)])\
-                                                        for a in range(self.n_action)])
-
-            if max([abs(values[s] - values_tmp[s]) for s in range(self.n_state)]) < error:
+        # while not is_done:
+        done = False
+        for _ in range(len_traj-1):
+            action = agent.act(state_now)
+            state_next, reward, done, _ = env.step(action)        
+            episode.append(Step(cur_state=env.pos2idx(state_now), action=action,
+                                next_state=env.pos2idx(state_next), reward=reward, done=done))
+            state_now = state_next
+            if done:
                 break
 
-        if deterministic:
-            # generate deterministic policy
-            policy = np.zeros([self.n_state])
-            for s in range(self.n_state):
-                policy[s] = np.argmax([sum([self.T[s, a, s1]*\
-                                            (self.env.get_reward(self.env.idx2pos(s))+\
-                                             self.gamma*values[s1])\
-                                             for s1 in range(self.n_state)])\
-                                             for a in range(self.n_action)])
-        else:
-            # generate stochastic policy
-            policy = np.zeros([self.n_state, self.n_action])
-            for s in range(self.n_state):
-                v_s = np.array([sum([self.T[s, a, s1]*\
-                                     (self.env.get_reward(self.env.idx2pos(s))+\
-                                      self.gamma*values[s1]) \
-                                      for s1 in range(self.n_state)]) \
-                                      for a in range(self.n_action)])
-                policy[s,:] = np.transpose(v_s/np.sum(v_s))
+        if done:
+            print "Episode {} was successfull, Agent reached the goal".format(i)            
+            trajs.append(episode)
 
-        self.policy = copy.copy(policy)
-        self.values = copy.copy(values)
-        return values, policy
+    return trajs
 
-
-    def act(self, state):
-        """
-        returns:
-        next action
-        """
-        state_action = self.policy[self.env.pos2idx(state)] #multiple actions?
-        print state_action
-        if type(state_action) == np.float64:
-            state_action = [state_action]
-        max_v           = min(state_action)
-        max_action_list = []
-        for i, v in enumerate(state_action):
-            if v > max_v:
-                max_action_list = []
-                max_v = v
-                max_action_list.append(i)
-            elif v == max_v:
-                max_action_list.append(i)
-
-        return random.choice(max_action_list)
-
+def feature_basis(env):
+    from scipy.spatial import distance
+    n_state  = env.grid_map_shape[0]*env.grid_map_shape[1]
     
-    ## def learn(self, state, reward, action, state_next ):
-    ##     q = self.q_table[self.env.pos2idx(state), action]
-    ##     q_next = reward + self.gamma * max(self.q_table[self.env.pos2idx(state_next)])
-    ##     self.q_table[self.env.pos2idx(state),action] += self.learning_rate * (q_next - q)
+    state_target = env.get_target_state()
+    states = []
+    for i in range(n_state):
+        states.append(env.idx2pos(i))
 
+    wall = []
+    for i, state in enumerate(states):
+        if env.checkOnWALL(state):
+            wall.append(state)
 
-    def save(self):
-        pickle.dump( self.policy, open( "valueiteration.pkl", "wb" ) )
+    # rel pos from goal ----------------------------------------------------
+    goal_hist_size = 10
 
+    dists = []
+    dists.append(distance.cdist(states, [state_target], metric='cityblock'))    
+    ## dists = np.amax(dists)-dists
 
-    def load(self, filename=None):
-        self.policy = pickle.load( open( "valueiteration.pkl", "rb" ) )
+    feat_goal_dist = np.zeros((n_state, goal_hist_size))
+    for i, dist_per_s in enumerate(dists):
+        hist, _ = np.histogram(dist_per_s, goal_hist_size, range=(0,np.amax(dists)))
+        feat_goal_dist[i] = hist
 
+    # collision ------------------------------------------
+    feat_collision = np.zeros((n_state,1))
+
+    for i, state in enumerate(states):
+        if state in wall:
+            feat_collision[i][0] = 0.
+        else:
+            feat_collision[i][0] = 1.
+
+    # done ------------------------------------------
+    feat_done = np.zeros((n_state,1))
+
+    for i, state in enumerate(states):
+        if state == state_target:
+            feat_done[i][0] = 1.
+        else:
+            feat_done[i][0] = 0.
+            
+    feat = np.hstack([feat_goal_dist, feat_collision, feat_done])
+    print "Feature size: ", np.shape(feat)
+    return feat
+        
+
+def plot(env, agent):
+    import matplotlib.pyplot as plt
+    plt.rcParams['image.cmap'] = 'jet'
+
+    rmap = agent.get_rewards()
+    
+    
+    plt.figure(figsize=(20,4))
+    plt.subplot(1, 3, 1)
+    img_utils.heatmap2d(rmap_gt, 'Rewards Map - Ground Truth', block=False)
+    plt.subplot(1, 3, 2)
+    img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+    plt.subplot(1, 3, 3)
+    img_utils.heatmap2d(np.reshape(path_gt, (H,W), order='F'), 'Path Map - Ground Truth', block=False)
+    plt.show()
+    sys.exit()
+    
         
 def train(env, episode_count=1000):
     state_now = env.reset()    
-    agent = ValueIterationAgent(env)
-    values, _  = agent.value_iteration(error=0.01, deterministic=False)
+    agent = vg.ValueIterationAgent(env)
+    ## values, _  = agent.value_iteration(error=0.01, deterministic=False)
+    agent.load()
+
+    # plot test!
+    plot(env, agent)
 
     # generate demonstrations
-    trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ,
-                                    rand_start=RAND_START)
+    trajs = generate_demonstrations(env, agent, n_trajs=100, len_traj=100,
+                                    rand_start=True)
 
     # feature selection
+    feat_map = feature_basis(env)
 
     # run irl
+    T = agent.get_transition_mat()
+    T = np.swapaxes(T,1,2)
+    rewards = maxent_irl(np.array(feat_map), T, gamma=0.95, trajs=trajs, lr=0.01, n_iters=20)
+    print rewards
 
     # value iteration
 
@@ -166,7 +142,7 @@ def train(env, episode_count=1000):
 
 def test(env):
     state_now = env.reset()    
-    agent = ValueIterationAgent(env)
+    agent = vg.ValueIterationAgent(env)
     agent.load()
 
     episode_count = 10
@@ -192,8 +168,8 @@ if __name__ == '__main__':
 
     env = gym.make('gridworld-v0')
     env.seed(0)
-    env.verbose=True
+    env.verbose=False
 
     train(env)
-    test(env)
+    ## test(env)
             

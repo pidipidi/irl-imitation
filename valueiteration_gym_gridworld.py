@@ -34,6 +34,9 @@ class ValueIterationAgent(object):
         self.values = None
         self.policy = None
 
+    def get_transition_mat(self):
+        return copy.copy(self.T)
+
     def _create_trainsition_mtx(self):
         T = np.zeros((self.n_state, self.n_action, self.n_state))
 
@@ -115,7 +118,6 @@ class ValueIterationAgent(object):
         next action
         """
         state_action = self.policy[self.env.pos2idx(state)] #multiple actions?
-        print state_action
         if type(state_action) == np.float64:
             state_action = [state_action]
         max_v           = min(state_action)
@@ -137,12 +139,12 @@ class ValueIterationAgent(object):
     ##     self.q_table[self.env.pos2idx(state),action] += self.learning_rate * (q_next - q)
 
 
-    def save(self):
-        pickle.dump( self.policy, open( "valueiteration.pkl", "wb" ) )
+    def save(self, filename="valueiteration.pkl"):
+        pickle.dump( self.policy, open( filename, "wb" ) )
 
 
-    def load(self, filename=None):
-        self.policy = pickle.load( open( "valueiteration.pkl", "rb" ) )
+    def load(self, filename="valueiteration.pkl"):
+        self.policy = pickle.load( open( filename, "rb" ) )
 
         
 def train(env, episode_count=1000):

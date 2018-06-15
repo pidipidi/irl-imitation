@@ -321,7 +321,7 @@ class GridworldEnv(gym.Env):
         returns:
         2d column-major position
         """
-        return (idx / self.grid_map_shape[1], idx % self.grid_map_shape[1])
+        return [idx / self.grid_map_shape[1], idx % self.grid_map_shape[1]]
 
     
     def checkOnWALL(self, pos):
