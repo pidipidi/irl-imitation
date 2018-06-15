@@ -135,6 +135,15 @@ class GridworldEnv(gym.Env):
         #return self.observation
 
 
+    def get_reward(self, state):
+        
+        if state[0] == self.agent_target_state[0] and state[1] == self.agent_target_state[1]:
+            return self.terminal_reward
+        if self.current_grid_map[state[0], state[1]] == WALL:
+            return self.wall_reward
+        return self.step_reward
+    
+
     def _read_grid_map(self, grid_map_path):
         grid_map = open(grid_map_path, 'r').readlines()
         grid_map_array = []
@@ -304,6 +313,7 @@ class GridworldEnv(gym.Env):
         """
         return pos[1] + pos[0] * self.grid_map_shape[1]
 
+
     def idx2pos(self, idx):
         """
         input:
@@ -312,4 +322,11 @@ class GridworldEnv(gym.Env):
         2d column-major position
         """
         return (idx / self.grid_map_shape[1], idx % self.grid_map_shape[1])
+
     
+    def checkOnWALL(self, pos):
+
+        if self.current_grid_map[pos[0], pos[1]] == WALL:
+            return True
+        else:
+            return False 

@@ -150,18 +150,7 @@ def train(env, episode_count=1000):
     agent = ValueIterationAgent(env)
     values, _  = agent.value_iteration(error=0.01, deterministic=False)
 
-    # generate demonstrations
-    trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ,
-                                    rand_start=RAND_START)
-
-    # feature selection
-
-    # run irl
-
-    # value iteration
-
     agent.save()
-    
 
 
 def test(env):
